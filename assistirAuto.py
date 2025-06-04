@@ -1,6 +1,10 @@
 import time
 from playwright.sync_api import sync_playwright
 
+
+# Initial configuration
+# Change to your login details and video URLs
+
 EMAIL = "email@example.com"
 SENHA = "password123"
 
@@ -12,33 +16,33 @@ video_urls = [
 
 chrome_path = "C:/Program Files/Google/Chrome/Application/chrome.exe"
 
-def aguardar_video_terminar(frame):
-    print("⏳ Aguardando o vídeo terminar ou travar por 30 segundos...")
-    pausado_ha = 0
-    ultimo_tempo = 0
+def wait_video_finish(frame):
+    print("⏳ Waiting the video finishes or lock for 30 seconds...")
+    paused_for = 0
+    last_time = 0
     while True:
         try:
             current = frame.evaluate("document.querySelector('video')?.currentTime || 0")
             duration = frame.evaluate("document.querySelector('video')?.duration || 0")
         except Exception as e:
-            print(f"⚠️ Erro ao obter progresso: {e}")
+            print(f"⚠️ Error getting progress: {e}")
             break
 
-        print(f"⏱️ Progresso: {current:.2f} / {duration:.2f} | Parado há: {pausado_ha}s")
+        print(f"⏱️ Progress: {current:.2f} / {duration:.2f} | Stuck for: {paused_for}s")
 
-        if abs(current - ultimo_tempo) < 0.1:
-            pausado_ha += 5
+        if abs(current - last_time) < 0.1:
+            paused_for += 5
         else:
-            pausado_ha = 0
+            paused_for = 0
 
-        ultimo_tempo = current
+        last_time = current
 
-        if pausado_ha >= 30:
-            print("⚠️ Vídeo travado por 30 segundos. Pulando para o próximo.")
+        if paused_for >= 30:
+            print("⚠️ Video stuck for 30 seconds. Skipping to the next.")
             break
 
         if duration > 0 and (duration - current) < 1 and current > 0:
-            print("✅ Vídeo finalizado com sucesso.")
+            print("✅ Video finished successfully.")
             break
 
         time.sleep(5)
@@ -65,38 +69,38 @@ with sync_playwright() as p:
     page.set_viewport_size({"width": 1920, "height": 1080})
 
     for url in video_urls:
-        print(f"Abrindo: {url}")
+        print(f"Opening: {url}")
         page.goto(url)
 
-        # Login automático
+        # Automatic login if needed
         if "login" in page.url or page.locator("input[name='email']").is_visible():
-            print("🔐 Tela de login detectada. Fazendo login...")
+            print("🔐 Login screen detected. Logging in...")
             page.fill("input[name='email']", EMAIL)
             page.fill("input[name='password']", SENHA)
             page.keyboard.press("Enter")
             page.wait_for_timeout(3000)
             page.wait_for_selector("text=Meus Cursos", timeout=15000)
-            print("✅ Login realizado. Recarregando vídeo...")
+            print("✅ Login successful. Reloading video...")
             page.goto(url)
             page.wait_for_timeout(5000)
 
-        # Fechar pop-up
+        # Close pop-up
         try:
             popup = page.locator("text=Entenda como funciona")
             popup.wait_for(timeout=5000)
-            print("🟢 Pop-up detectado.")
+            print("🟢 Pop-up detected.")
             checkbox = page.locator("input[type='checkbox']")
             if checkbox.is_visible():
                 checkbox.check()
-            fechar = page.locator("button:has-text('FECHAR')")
-            if fechar.is_visible():
-                fechar.click()
-                print("🧼 Pop-up fechado.")
+            close = page.locator("button:has-text('FECHAR')")
+            if close.is_visible():
+                close.click()
+                print("🧼 Pop-up closed.")
         except Exception as e:
-            print(f"ℹ️ Nenhum pop-up detectado. ({e})")
+            print(f"ℹ️ No pop-up detected. ({e})")
 
 
-        # Força tentativa de autoplay e remove overlays
+        # Force autoplay attempt and remove overlays
         try:
             page.evaluate("""
                 let v = document.querySelector('video');
@@ -115,30 +119,30 @@ with sync_playwright() as p:
             time.sleep(1)
             try:
                 page.click("video", timeout=3000, force=True)
-                print("🖱️ Clique forçado no vídeo para tentar autoplay.")
+                print("🖱️ Forced click on video to attempt autoplay.")
             except Exception:
                 pass
-            for tentativa in range(4):
+            for attempt in range(4):
                 is_playing = page.evaluate("document.querySelector('video')?.paused === false")
                 if not is_playing:
-                    print(f"▶️ Tentando iniciar o vídeo... (tentativa {tentativa+1})")
+                    print(f"▶️ Trying to start video... (attempt {attempt+1})")
                     page.evaluate("document.querySelector('video')?.play().catch(()=>{})")
                     time.sleep(2)
                 else:
-                    print("🎬 Vídeo já está tocando.")
+                    print("🎬 VVideo is already playing.")
                     break
         except Exception as e:
-            print(f"⚠️ Erro ao forçar play: {e}")
+            print(f"⚠️ Error forcing play: {e}")
 
-        # Esperar o iframe do Panda Vídeo
+        # Wait for the Panda Video iframe
         try:
             page.wait_for_selector("iframe[src*='pandavideo']", timeout=30000)
             iframe_element = page.query_selector("iframe[src*='pandavideo']")
             frame = iframe_element.content_frame()
 
-            # Espera o vídeo carregar dentro do iframe
+            # Wait for the video to load inside the iframe
             frame.wait_for_selector("video", timeout=20000)
-            print("🎥 Vídeo encontrado dentro do iframe.")
+            print("🎥 VVideo found inside the iframe.")
 
             frame.evaluate("""
                 let v = document.querySelector('video');
@@ -152,14 +156,14 @@ with sync_playwright() as p:
                 }
             """)
 
-            aguardar_video_terminar(frame)
+            wait_video_finish(frame)
 
         except Exception as e:
-            print(f"❌ Erro ao processar vídeo no iframe: {e}")
+            print(f"❌ Error processing video in iframe: {e}")
 
-        print("➡️ Próximo vídeo...\n")
+        print("➡️ Next video...\n")
         time.sleep(5)
 
     browser.close()
 
-print("🏁 Todos os vídeos foram executados com sucesso.")
+print("🏁 All videos have been successfully played.")
